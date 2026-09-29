@@ -1,4 +1,4 @@
-# Chat
+# AhmedGPT
 
 A ChatGPT-style chat website powered by the DeepSeek API.
 
@@ -19,12 +19,15 @@ No `npm install` is needed. The server has zero dependencies.
 ## Features
 
 - Streaming replies with a stop button
-- Chat history in the sidebar (Today / Yesterday / ...), search, rename, delete
+- Chat history in the sidebar (Pinned / Today / Yesterday / ...), search, pin, rename, delete
 - Edit a sent message, regenerate, copy
 - **Think** toggle turns on the model's thinking (`deepseek-reasoner`, or `thinking: true` when `MODEL` is set) and shows its reasoning ("Thought for N seconds")
 - Markdown, tables, code highlighting with copy buttons, LaTeX math
 - Attachments via the + button, drag and drop, or paste: text/code files, CSV, JSON, PDF, .docx and images
-- Light / dark / system theme; works on phones
+- Settings: theme, accent color, text size, default model, Enter to send, show thinking, custom instructions (nickname, about you, response style), export or delete all chats
+- Suggestion chips, scroll-to-bottom button, Cmd/Ctrl+Shift+O for a new chat
+- Smooth motion that respects Reduce Motion; works on phones
+- If the main model hasn't started answering within `FALLBACK_AFTER` seconds, `FALLBACK_MODEL` answers instead, and the main model is skipped for 5 minutes
 
 ## Notes
 

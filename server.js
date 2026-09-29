@@ -16,14 +16,17 @@ if (fs.existsSync(envPath)) {
 const PORT = Number(process.env.PORT) || 3000;
 const API_KEY = process.env.DEEPSEEK_API_KEY || '';
 const BASE_URL = (process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com').replace(/\/$/, '');
-const APP_NAME = process.env.APP_NAME || 'Chat';
+const APP_NAME = process.env.APP_NAME || 'AhmedGPT';
 // Set MODEL to use one provider model for both modes (e.g. NVIDIA's deepseek-ai/deepseek-v4.1-flash);
 // the Think button then toggles its thinking on and off.
 const CUSTOM_MODEL = process.env.MODEL || '';
 const MAX_TOKENS = Number(process.env.MAX_TOKENS) || 8192;
 // Optional backup model, used when the main one hasn't started answering within FALLBACK_AFTER seconds
 const FALLBACK_MODEL = process.env.FALLBACK_MODEL || '';
-const FALLBACK_AFTER_MS = (Number(process.env.FALLBACK_AFTER) || 15) * 1000;
+const FALLBACK_AFTER_MS = (Number(process.env.FALLBACK_AFTER) || 8) * 1000;
+// After the main model misses its deadline, skip it for a while so every message isn't delayed
+const PRIMARY_COOLDOWN_MS = 5 * 60 * 1000;
+let primaryDownUntil = 0;
 const MAX_BODY = 25 * 1024 * 1024;
 const ALLOWED_MODELS = new Set(['deepseek-chat', 'deepseek-reasoner']);
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -102,6 +105,8 @@ async function handleChat(req, res) {
     attempts.push({ model: FALLBACK_MODEL, messages, stream: true, max_tokens: MAX_TOKENS, reasoning_effort: thinking ? 'medium' : 'low' });
   }
 
+  if (attempts.length > 1 && Date.now() < primaryDownUntil) attempts.shift();
+
   try {
     for (let i = 0; i < attempts.length; i++) {
       const isLast = i === attempts.length - 1;
@@ -121,6 +126,7 @@ async function handleChat(req, res) {
       } catch (e) {
         if (controller.signal.aborted) return;
         if (!isLast) {
+          primaryDownUntil = Date.now() + PRIMARY_COOLDOWN_MS;
           console.log(`${attempts[i].model} did not respond in time, falling back to ${attempts[i + 1].model}`);
           continue;
         }
@@ -136,6 +142,7 @@ async function handleChat(req, res) {
           if (detail) msg += `: ${detail}`;
         } catch {}
         if (!isLast) {
+          primaryDownUntil = Date.now() + PRIMARY_COOLDOWN_MS;
           console.log(`${attempts[i].model} failed (${msg}), falling back to ${attempts[i + 1].model}`);
           continue;
         }

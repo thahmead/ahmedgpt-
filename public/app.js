@@ -31,8 +31,10 @@
     search: $('searchChats'),
     dropOverlay: $('dropOverlay'),
     toast: $('toast'),
-    themeToggle: $('themeToggle'),
-    themeLabel: $('themeLabel'),
+    settings: $('settings'),
+    scrollDown: $('scrollDown'),
+    composerArea: $('composerArea'),
+    heroText: $('heroText'),
   };
 
   const ICONS = {
@@ -45,6 +47,9 @@
     dots: '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>',
     trash: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg>',
     pencil: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
+    pin: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5M9 3h6l-1 6 4 4v2H6v-2l4-4Z"/></svg>',
+    pinSmall: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M9 3h6l-1 6 4 4v2H6v-2l4-4Z"/><path d="M12 15v6" fill="none" stroke-width="2" stroke-linecap="round"/></svg>',
+    unpin: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5M9 3h6l-1 6 4 4v2H6v-2l4-4Z"/><path d="M3 3l18 18"/></svg>',
     x: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>',
     file: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6M8 13h8M8 17h5"/></svg>',
     chevron: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg>',
@@ -53,9 +58,10 @@
   // ---------- State ----------
   let conversations = loadConversations();
   let currentId = null;
-  let model = localStorage.getItem('model') || 'deepseek-chat';
+  let model = 'deepseek-chat';
   let pending = []; // attachments waiting to be sent
   let streaming = null; // { controller, chatId }
+  let booted = false; // skip entrance morphs on first paint
 
   function uid() {
     return (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
@@ -182,19 +188,127 @@
     });
   }
 
-  // ---------- Theme ----------
-  function applyTheme(t) {
-    if (t === 'system') delete document.documentElement.dataset.theme;
-    else document.documentElement.dataset.theme = t;
-    els.themeLabel.textContent = 'Theme: ' + t[0].toUpperCase() + t.slice(1);
-    try { localStorage.setItem('theme', t); } catch {}
+  // ---------- Settings ----------
+  const DEFAULT_SETTINGS = {
+    theme: 'system',
+    accent: 'default',
+    fontSize: 'default',
+    defaultModel: 'deepseek-chat',
+    enterToSend: true,
+    showThinking: false,
+    instructionsEnabled: true,
+    nickname: '',
+    aboutYou: '',
+    responseStyle: '',
+  };
+  let settings = { ...DEFAULT_SETTINGS };
+  try {
+    settings = { ...DEFAULT_SETTINGS, theme: localStorage.getItem('theme') || 'system', ...JSON.parse(localStorage.getItem('settings') || '{}') };
+  } catch {}
+
+  function saveSettings() {
+    try {
+      localStorage.setItem('settings', JSON.stringify(settings));
+      localStorage.setItem('theme', settings.theme); // read by the inline script before paint
+    } catch {}
   }
-  let theme = localStorage.getItem('theme') || 'system';
-  applyTheme(theme);
-  els.themeToggle.addEventListener('click', () => {
-    theme = { system: 'light', light: 'dark', dark: 'system' }[theme];
-    applyTheme(theme);
+
+  function applySettings() {
+    const root = document.documentElement;
+    if (settings.theme === 'system') delete root.dataset.theme;
+    else root.dataset.theme = settings.theme;
+    if (settings.accent === 'default') delete root.dataset.accent;
+    else root.dataset.accent = settings.accent;
+    if (settings.fontSize === 'default') delete root.dataset.font;
+    else root.dataset.font = settings.fontSize;
+    const name = settings.nickname.trim();
+    els.heroText.textContent = name ? `What can I help with, ${name}?` : 'What can I help with?';
+    document.querySelector('.avatar').textContent = (name || 'A')[0].toUpperCase();
+  }
+
+  function syncSettingsForm() {
+    els.settings.querySelectorAll('[data-setting]').forEach((el) => {
+      const key = el.dataset.setting;
+      if (el.classList.contains('segmented') || el.classList.contains('swatches')) {
+        el.querySelectorAll('button').forEach((b) => {
+          b.classList.toggle('selected', b.dataset.value === settings[key]);
+          b.setAttribute('aria-pressed', b.dataset.value === settings[key]);
+        });
+      } else if (el.type === 'checkbox') el.checked = !!settings[key];
+      else el.value = settings[key] ?? '';
+    });
+  }
+
+  function openSettings() {
+    closeMenus();
+    syncSettingsForm();
+    els.settings.classList.remove('closing');
+    els.settings.showModal();
+    if (isMobile()) closeSidebar();
+  }
+  function closeSettings() {
+    if (!els.settings.open || els.settings.classList.contains('closing')) return;
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce) return els.settings.close();
+    els.settings.classList.add('closing');
+    setTimeout(() => {
+      els.settings.classList.remove('closing');
+      els.settings.close();
+    }, 150);
+  }
+
+  $('openSettings').addEventListener('click', openSettings);
+  $('closeSettings').addEventListener('click', closeSettings);
+  els.settings.addEventListener('cancel', (e) => {
+    e.preventDefault();
+    closeSettings();
   });
+  els.settings.addEventListener('click', (e) => {
+    if (e.target === els.settings) closeSettings(); // backdrop click
+  });
+  els.settings.querySelectorAll('.tab').forEach((tab) =>
+    tab.addEventListener('click', () => {
+      els.settings.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t === tab));
+      els.settings.querySelectorAll('.pane').forEach((p) => p.classList.toggle('active', p.dataset.pane === tab.dataset.tab));
+    })
+  );
+  els.settings.querySelectorAll('.segmented, .swatches').forEach((group) =>
+    group.addEventListener('click', (e) => {
+      const b = e.target.closest('button[data-value]');
+      if (!b) return;
+      settings[group.dataset.setting] = b.dataset.value;
+      if (group.dataset.setting === 'defaultModel' && !current()) setModel(b.dataset.value);
+      saveSettings();
+      applySettings();
+      syncSettingsForm();
+    })
+  );
+  els.settings.querySelectorAll('input[data-setting], textarea[data-setting]').forEach((el) =>
+    el.addEventListener(el.type === 'checkbox' ? 'change' : 'input', () => {
+      settings[el.dataset.setting] = el.type === 'checkbox' ? el.checked : el.value;
+      saveSettings();
+      applySettings();
+    })
+  );
+  $('exportChats').addEventListener('click', () => {
+    const blob = new Blob([JSON.stringify(conversations, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `ahmedgpt-chats-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  });
+  $('deleteAll').addEventListener('click', () => {
+    if (!conversations.length) return toast('No chats to delete');
+    if (!confirm('Delete all chats? This cannot be undone.')) return;
+    if (streaming) stopStreaming();
+    conversations = [];
+    save();
+    closeSettings();
+    newChat();
+    toast('All chats deleted');
+  });
+  applySettings();
 
   // ---------- Model ----------
   function setModel(m) {
@@ -204,7 +318,7 @@
     els.reasonToggle.classList.toggle('active', model === 'deepseek-reasoner');
     els.modelMenu.querySelectorAll('.menu-item').forEach((b) => b.classList.toggle('selected', b.dataset.model === model));
   }
-  setModel(model);
+  setModel(settings.defaultModel);
 
   els.modelBtn.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -239,7 +353,7 @@
   $('openSidebar').addEventListener('click', openSidebar);
   $('closeSidebar').addEventListener('click', closeSidebar);
   $('scrim').addEventListener('click', closeSidebar);
-  ['newChat', 'newChatTop', 'newChatBar'].forEach((id) => $(id).addEventListener('click', newChat));
+  ['newChat', 'brandBtn', 'newChatBar'].forEach((id) => $(id).addEventListener('click', newChat));
   els.search.addEventListener('input', renderSidebar);
 
   function groupLabel(ts) {
@@ -260,6 +374,8 @@
       .filter((c) => c.messages.length)
       .filter((c) => !q || c.title.toLowerCase().includes(q) || c.messages.some((m) => m.content.toLowerCase().includes(q)))
       .sort((a, b) => b.updatedAt - a.updatedAt);
+    // Pinned chats float to the top in their own group
+    list.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
 
     els.history.innerHTML = '';
     if (!list.length) {
@@ -269,7 +385,7 @@
     let lastGroup = null;
     let groupEl;
     for (const c of list) {
-      const g = groupLabel(c.updatedAt);
+      const g = c.pinned ? 'Pinned' : groupLabel(c.updatedAt);
       if (g !== lastGroup) {
         groupEl = document.createElement('div');
         groupEl.className = 'history-group';
@@ -279,7 +395,7 @@
       }
       const item = document.createElement('div');
       item.className = 'chat-item' + (c.id === currentId ? ' active' : '');
-      item.innerHTML = `<button class="chat-title" type="button"></button><button class="chat-more" type="button" aria-label="Options">${ICONS.dots}</button>`;
+      item.innerHTML = `${c.pinned ? `<span class="pin-glyph" aria-label="Pinned">${ICONS.pinSmall}</span>` : ''}<button class="chat-title" type="button"></button><button class="chat-more" type="button" aria-label="Chat options">${ICONS.dots}</button>`;
       item.querySelector('.chat-title').textContent = c.title;
       item.querySelector('.chat-title').addEventListener('click', () => {
         openChat(c.id);
@@ -307,6 +423,11 @@
   });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') closeMenus();
+    // Cmd/Ctrl + Shift + O: new chat, like ChatGPT
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'o') {
+      e.preventDefault();
+      newChat();
+    }
   });
 
   function showChatMenu(anchor, chat, item) {
@@ -316,12 +437,13 @@
     const menu = document.createElement('div');
     menu.className = 'menu';
     menu.innerHTML = `
+      <button class="menu-item small" data-act="pin">${chat.pinned ? ICONS.unpin : ICONS.pin}<span>${chat.pinned ? 'Unpin' : 'Pin'}</span></button>
       <button class="menu-item small" data-act="rename">${ICONS.pencil}<span>Rename</span></button>
       <button class="menu-item small danger" data-act="delete">${ICONS.trash}<span>Delete</span></button>`;
     document.body.appendChild(menu);
     const r = anchor.getBoundingClientRect();
     menu.style.position = 'fixed';
-    menu.style.top = Math.min(r.bottom + 4, window.innerHeight - 110) + 'px';
+    menu.style.top = Math.min(r.bottom + 4, window.innerHeight - 150) + 'px';
     menu.style.left = Math.min(r.left, window.innerWidth - 190) + 'px';
     anchor.setAttribute('aria-expanded', 'true');
     openMenu = { el: menu, anchor };
@@ -330,6 +452,12 @@
       const act = e.target.closest('[data-act]')?.dataset.act;
       if (!act) return;
       closeMenus();
+      if (act === 'pin') {
+        chat.pinned = !chat.pinned;
+        save();
+        renderSidebar();
+        toast(chat.pinned ? 'Chat pinned' : 'Chat unpinned');
+      }
       if (act === 'rename') startRename(chat, item);
       if (act === 'delete') deleteChat(chat.id);
     });
@@ -373,6 +501,7 @@
   function newChat() {
     if (streaming) stopStreaming();
     currentId = null;
+    setModel(settings.defaultModel);
     pending = [];
     renderAttachments();
     renderMessages();
@@ -399,10 +528,25 @@
   // ---------- Messages ----------
   function renderMessages() {
     const c = current();
-    els.messages.innerHTML = '';
-    els.app.classList.toggle('empty', !c || !c.messages.length);
-    if (!c) return;
-    c.messages.forEach((m, i) => els.messages.appendChild(buildMessage(m, i, c)));
+    const empty = !c || !c.messages.length;
+    const draw = () => {
+      els.messages.innerHTML = '';
+      els.app.classList.toggle('empty', empty);
+      if (c) c.messages.forEach((m, i) => els.messages.appendChild(buildMessage(m, i, c)));
+      updateComposerHeight();
+    };
+    // Morph the composer between the centered and docked layouts
+    const morph = booted && empty !== els.app.classList.contains('empty') && document.startViewTransition &&
+      document.visibilityState === 'visible' && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (morph) {
+      const t = document.startViewTransition(draw);
+      t.ready.catch(() => {});
+      t.finished.catch(() => {});
+    } else draw();
+  }
+
+  function updateComposerHeight() {
+    els.app.style.setProperty('--composer-h', els.composerArea.offsetHeight + 'px');
   }
 
   function attachmentNode(a, removable, onRemove) {
@@ -497,7 +641,7 @@
   function buildThinking(m) {
     const d = document.createElement('details');
     d.className = 'thinking';
-    if (m.streaming && !m.content) d.open = true;
+    if (m.streaming && !m.content && settings.showThinking) d.open = true;
     const secs = m.thinkingMs ? Math.max(1, Math.round(m.thinkingMs / 1000)) : null;
     const label = m.streaming && !m.content ? '<span class="shimmer">Thinking</span>' : `Thought for ${secs ?? 'a few'} second${secs === 1 ? '' : 's'}`;
     d.innerHTML = `<summary>${label}${ICONS.chevron}</summary><div class="reasoning"></div>`;
@@ -548,7 +692,10 @@
     newDetails?.addEventListener('toggle', () => (newDetails.dataset.touched = '1'));
     if (newDetails && oldDetails) newDetails.querySelector('.reasoning').scrollTop = oldDetails.querySelector('.reasoning').scrollTop;
     if (old) old.replaceWith(fresh);
-    else els.messages.appendChild(fresh);
+    else {
+      fresh.classList.add('enter');
+      els.messages.appendChild(fresh);
+    }
     if (nearBottom) scrollToBottom();
   }
 
@@ -601,8 +748,18 @@
   }
 
   // ---------- Sending ----------
+  function systemPrompt() {
+    const lines = ['You are AhmedGPT, a helpful, friendly and concise AI assistant. Format answers with Markdown when it helps.'];
+    if (settings.instructionsEnabled) {
+      if (settings.nickname.trim()) lines.push(`The user's name is ${settings.nickname.trim()}. Use it naturally when it fits, and know it if they ask.`);
+      if (settings.aboutYou.trim()) lines.push(`About the user:\n${settings.aboutYou.trim()}`);
+      if (settings.responseStyle.trim()) lines.push(`How to respond:\n${settings.responseStyle.trim()}`);
+    }
+    return lines.join('\n\n');
+  }
+
   function buildApiMessages(chat) {
-    const out = [];
+    const out = [{ role: 'system', content: systemPrompt() }];
     for (const m of chat.messages) {
       if (m.streaming) continue;
       if (m.role === 'user') {
@@ -652,6 +809,7 @@
     renderAttachments();
     save();
     renderMessages();
+    els.messages.lastElementChild?.classList.add('enter');
     renderSidebar();
     scrollToBottom(true);
     runCompletion(chat);
@@ -777,6 +935,7 @@
   function autoresize() {
     els.input.style.height = 'auto';
     els.input.style.height = Math.min(els.input.scrollHeight, 208) + 'px';
+    updateComposerHeight();
   }
   function updateSend() {
     const hasContent = els.input.value.trim() || pending.length;
@@ -790,7 +949,7 @@
     updateSend();
   });
   els.input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && !isMobile()) {
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && !isMobile() && settings.enterToSend) {
       e.preventDefault();
       if (!streaming) send();
     }
@@ -974,11 +1133,34 @@
     throw new Error('no document text found');
   }
 
+  // ---------- Suggestions & scroll ----------
+  $('suggestions').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-prompt]');
+    if (!b) return;
+    els.input.value = b.dataset.prompt;
+    autoresize();
+    updateSend();
+    send();
+  });
+  let scrollTick = false;
+  els.thread.addEventListener('scroll', () => {
+    if (scrollTick) return;
+    scrollTick = true;
+    requestAnimationFrame(() => {
+      scrollTick = false;
+      els.scrollDown.hidden = isNearBottom() || els.app.classList.contains('empty');
+    });
+  }, { passive: true });
+  els.scrollDown.addEventListener('click', () => {
+    els.thread.scrollTo({ top: els.thread.scrollHeight, behavior: 'smooth' });
+  });
+
   // ---------- Init ----------
   fetch('/api/config')
     .then((r) => r.json())
     .then((cfg) => {
       els.appName.textContent = cfg.appName;
+      document.querySelector('.brand-name').textContent = cfg.appName;
       document.title = cfg.appName;
       if (!cfg.hasKey) toast('Server has no API key yet. Add DEEPSEEK_API_KEY to .env');
     })
@@ -992,6 +1174,7 @@
   }
   updateSend();
   autoresize();
+  booted = true;
   window.addEventListener('load', autoresize);
   window.addEventListener('resize', autoresize);
   if (!isMobile()) els.input.focus();
