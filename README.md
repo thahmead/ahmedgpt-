@@ -22,6 +22,7 @@ No `npm install` is needed. The server has zero dependencies.
 - Chat history in the sidebar (Pinned / Today / Yesterday / ...), search, pin, rename, delete
 - Edit a sent message, regenerate, copy
 - **Think** toggle turns on the model's thinking (`deepseek-reasoner`, or `thinking: true` when `MODEL` is set) and shows its reasoning ("Thought for N seconds")
+- **Search** button: a web-search agent that searches, reads the most relevant pages, shows each step live, and answers with source links. Set `TAVILY_API_KEY` for reliable search; without it the agent uses Brave, then DuckDuckGo (via `curl`), then Wikipedia. It can't open private or local addresses.
 - Markdown, tables, code highlighting with copy buttons, LaTeX math
 - Attachments via the + button, drag and drop, or paste: text/code files, CSV, JSON, PDF, .docx and images
 - Settings: theme, accent color, text size, default model, Enter to send, show thinking, custom instructions (nickname, about you, response style), export or delete all chats

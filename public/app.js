@@ -28,6 +28,7 @@
     modelLabel: $('modelLabel'),
     appName: $('appName'),
     reasonToggle: $('reasonToggle'),
+    searchToggle: $('searchToggle'),
     search: $('searchChats'),
     dropOverlay: $('dropOverlay'),
     toast: $('toast'),
@@ -52,6 +53,10 @@
     unpin: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5M9 3h6l-1 6 4 4v2H6v-2l4-4Z"/><path d="M3 3l18 18"/></svg>',
     x: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>',
     file: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6M8 13h8M8 17h5"/></svg>',
+    globe: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>',
+    search: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
+    page: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/></svg>',
+    warn: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>',
     chevron: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg>',
   };
 
@@ -331,6 +336,22 @@
     els.modelMenu.hidden = true;
   });
   els.reasonToggle.addEventListener('click', () => setModel(model === 'deepseek-reasoner' ? 'deepseek-chat' : 'deepseek-reasoner'));
+
+  // ---------- Search agent toggle ----------
+  let searchMode = false;
+  try { searchMode = localStorage.getItem('searchMode') === '1'; } catch {}
+  function setSearchMode(on) {
+    searchMode = on;
+    els.searchToggle.classList.toggle('active', on);
+    els.searchToggle.setAttribute('aria-pressed', on);
+    els.input.placeholder = on ? 'Search the web' : 'Ask anything';
+    try { localStorage.setItem('searchMode', on ? '1' : '0'); } catch {}
+  }
+  setSearchMode(searchMode);
+  els.searchToggle.addEventListener('click', () => {
+    setSearchMode(!searchMode);
+    els.input.focus();
+  });
 
   // ---------- Sidebar ----------
   const isMobile = () => window.matchMedia('(max-width: 767px)').matches;
@@ -616,12 +637,14 @@
     }
 
     // assistant
+    if (m.steps?.length || (m.search && m.streaming)) el.appendChild(buildSteps(m));
     if (m.reasoning) el.appendChild(buildThinking(m));
     const content = document.createElement('div');
     content.className = 'content';
     el.appendChild(content);
     fillAssistantContent(content, m);
 
+    if (m.sources?.length && !m.streaming) el.appendChild(buildSources(m));
     if (m.error) el.appendChild(buildError(m, chat));
 
     const isLast = index === chat.messages.length - 1;
@@ -642,6 +665,66 @@
     return el;
   }
 
+  function hostOf(url) {
+    try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return url; }
+  }
+
+  function buildSteps(m) {
+    const d = document.createElement('details');
+    d.className = 'thinking agent-steps';
+    const working = m.streaming && !m.content;
+    if (working) d.open = true;
+    const reads = (m.steps || []).filter((s) => s.type === 'read' && s.done).length;
+    const searches = (m.steps || []).filter((s) => s.type === 'search').length;
+    const label = working
+      ? `<span class="shimmer">${escapeHtml(m.steps?.length ? stepLabel(m.steps[m.steps.length - 1]) : 'Searching the web')}</span>`
+      : reads ? `Read ${reads} source${reads === 1 ? '' : 's'}` : `Searched ${searches} time${searches === 1 ? '' : 's'}`;
+    d.innerHTML = `<summary>${ICONS.globe}${label}${ICONS.chevron}</summary><ol class="steps"></ol>`;
+    const list = d.querySelector('.steps');
+    for (const st of m.steps || []) {
+      const li = document.createElement('li');
+      li.className = 'step' + (st.failed ? ' failed' : '') + (st.done || st.type === 'search' ? '' : ' pending');
+      if (st.type === 'search') {
+        li.innerHTML = `${ICONS.search}<span></span><small></small>`;
+        li.querySelector('span').textContent = st.query;
+        li.querySelector('small').textContent = st.count == null ? '' : `${st.count} results`;
+      } else {
+        li.innerHTML = `${st.failed ? ICONS.warn : ICONS.page}<a target="_blank" rel="noopener noreferrer"></a><small></small>`;
+        const a = li.querySelector('a');
+        a.href = st.url;
+        a.textContent = st.title || hostOf(st.url);
+        li.querySelector('small').textContent = st.failed ? "couldn't open" : hostOf(st.url);
+      }
+      list.appendChild(li);
+    }
+    return d;
+  }
+
+  function stepLabel(st) {
+    if (st.type === 'search') return st.count == null ? `Searching “${st.query}”` : `Found ${st.count} results`;
+    return st.done || st.failed ? 'Thinking about what it found' : `Reading ${hostOf(st.url)}`;
+  }
+
+  function buildSources(m) {
+    const wrap = document.createElement('div');
+    wrap.className = 'sources';
+    m.sources.forEach((src, i) => {
+      const a = document.createElement('a');
+      a.className = 'source';
+      a.href = src.url;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.title = src.title;
+      a.style.animationDelay = i * 40 + 'ms';
+      const host = hostOf(src.url);
+      a.innerHTML = `<span class="source-badge"></span><span class="source-host"></span>`;
+      a.querySelector('.source-badge').textContent = host[0]?.toUpperCase() || '•';
+      a.querySelector('.source-host').textContent = host;
+      wrap.appendChild(a);
+    });
+    return wrap;
+  }
+
   function buildThinking(m) {
     const d = document.createElement('details');
     d.className = 'thinking';
@@ -660,12 +743,12 @@
     } else {
       content.innerHTML = '';
     }
-    if (m.streaming && m.slow && !m.content && !m.reasoning) {
+    if (m.streaming && m.slow && !m.content && !m.reasoning && !m.search) {
       const note = document.createElement('p');
       note.className = 'shimmer';
       note.textContent = 'Thinking…';
       content.appendChild(note);
-    } else if (m.streaming && !m.reasoning) {
+    } else if (m.streaming && !m.reasoning && !m.search) {
       const dot = document.createElement('span');
       dot.className = 'cursor-dot';
       (content.lastElementChild && /^(P|LI)$/.test(content.lastElementChild.tagName) ? content.lastElementChild : content).appendChild(dot);
@@ -687,14 +770,15 @@
     const nearBottom = isNearBottom();
     const fresh = buildMessage(m, chat.messages.indexOf(m), chat);
     // Keep the reasoning panel open/closed as the user left it
-    const oldDetails = old?.querySelector('details.thinking');
-    const newDetails = fresh.querySelector('details.thinking');
-    if (oldDetails && newDetails && oldDetails.dataset.touched) {
-      newDetails.open = oldDetails.open;
-      newDetails.dataset.touched = '1';
+    for (const cls of ['agent-steps', 'thinking:not(.agent-steps)']) {
+      const oldDetails = old?.querySelector(`details.${cls}`);
+      const newDetails = fresh.querySelector(`details.${cls}`);
+      if (oldDetails && newDetails && oldDetails.dataset.touched) {
+        newDetails.open = oldDetails.open;
+        newDetails.dataset.touched = '1';
+      }
+      newDetails?.querySelector('summary').addEventListener('click', () => (newDetails.dataset.touched = '1'));
     }
-    newDetails?.addEventListener('toggle', () => (newDetails.dataset.touched = '1'));
-    if (newDetails && oldDetails) newDetails.querySelector('.reasoning').scrollTop = oldDetails.querySelector('.reasoning').scrollTop;
     if (old) old.replaceWith(fresh);
     else {
       fresh.classList.add('enter');
@@ -836,7 +920,7 @@
 
   async function runCompletion(chat) {
     const apiMessages = buildApiMessages(chat);
-    const m = { id: uid(), role: 'assistant', content: '', reasoning: '', streaming: true, model: chat.model };
+    const m = { id: uid(), role: 'assistant', content: '', reasoning: '', streaming: true, model: chat.model, search: searchMode, steps: [] };
     chat.messages.push(m);
     const controller = new AbortController();
     streaming = { controller, chatId: chat.id };
@@ -863,7 +947,7 @@
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: chat.model, messages: apiMessages }),
+        body: JSON.stringify({ model: chat.model, messages: apiMessages, agent: m.search ? 'search' : undefined }),
         signal: controller.signal,
       });
       if (!res.ok) {
@@ -895,6 +979,11 @@
             continue;
           }
           if (json.error) throw new Error(json.error.message || 'Stream error');
+          if (json.agent) {
+            applyAgentEvent(m, json.agent);
+            schedule();
+            continue;
+          }
           const delta = json.choices?.[0]?.delta || {};
           if (delta.reasoning_content) {
             if (!reasoningStart) reasoningStart = Date.now();
@@ -916,6 +1005,7 @@
       if (frame) cancelAnimationFrame(frame);
       if (m.reasoning && !m.thinkingMs) m.thinkingMs = Date.now() - (reasoningStart || started);
       m.streaming = false;
+      if (!m.steps?.length) delete m.steps;
       const idx = chat.messages.indexOf(m);
       if (idx !== -1 && !m.content && !m.reasoning && !m.error) {
         chat.messages.splice(idx, 1); // stopped before anything arrived
@@ -927,6 +1017,21 @@
       renderSidebar();
       updateSend();
     }
+  }
+
+  function applyAgentEvent(m, ev) {
+    const steps = m.steps;
+    if (ev.type === 'search') steps.push({ type: 'search', query: ev.query });
+    else if (ev.type === 'results') {
+      const st = [...steps].reverse().find((s) => s.type === 'search' && s.count == null);
+      if (st) st.count = ev.count;
+    } else if (ev.type === 'read') steps.push({ type: 'read', url: ev.url });
+    else if (ev.type === 'read_done' || ev.type === 'error') {
+      const st = [...steps].reverse().find((s) => s.type === 'read' && !s.done && !s.failed);
+      if (!st) return;
+      if (ev.type === 'read_done') Object.assign(st, { done: true, url: ev.url, title: ev.title });
+      else st.failed = true;
+    } else if (ev.type === 'sources') m.sources = ev.sources;
   }
 
   function stopStreaming() {

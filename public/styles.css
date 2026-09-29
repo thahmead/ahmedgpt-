@@ -630,3 +630,28 @@ input, textarea { font: inherit; color: inherit; }
 .brand:hover .brand-icon { transform: scale(1.08) rotate(-4deg); }
 .brand:active .brand-icon { transform: scale(.92); }
 .brand-icon.big { width: 56px; height: 56px; margin-bottom: 8px; }
+
+/* ================= v1.4: search agent ================= */
+.agent-steps summary svg:first-child { color: var(--text-3); }
+.steps { list-style: none; margin: 8px 0 0; padding: 0 0 0 14px; border-left: 2px solid var(--border); display: flex; flex-direction: column; gap: 6px; }
+.step { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--text-2); min-width: 0; animation: msgIn .3s var(--ease) both; }
+.step svg { flex-shrink: 0; color: var(--text-3); }
+.step span, .step a { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); text-decoration: none; }
+.step a:hover { color: var(--text); text-decoration: underline; }
+.step small { color: var(--text-3); font-size: 12px; white-space: nowrap; flex-shrink: 0; }
+.step.pending a { opacity: .7; }
+.step.failed a { text-decoration: line-through; opacity: .6; }
+.sources { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.source {
+  display: inline-flex; align-items: center; gap: 6px; max-width: 220px; padding: 4px 10px 4px 4px; border-radius: 999px;
+  background: var(--surface-2); color: var(--text-2); font-size: 12.5px; text-decoration: none;
+  transition: background-color .16s var(--ease), color .16s var(--ease), transform .16s var(--ease);
+  animation: msgIn .3s var(--ease) both;
+}
+.source:hover { background: var(--hover); color: var(--text); }
+.source:active { transform: scale(.96); }
+.source-badge {
+  width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0;
+  background: var(--bg); color: var(--text-2); font-size: 11px; font-weight: 600;
+}
+.source-host { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

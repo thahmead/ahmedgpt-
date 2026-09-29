@@ -3,6 +3,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const { runSearchAgent } = require('./agent');
 
 // Load .env (KEY=VALUE per line) without extra packages
 const envPath = path.join(__dirname, '.env');
@@ -23,6 +24,8 @@ const CUSTOM_MODEL = process.env.MODEL || '';
 const MAX_TOKENS = Number(process.env.MAX_TOKENS) || 8192;
 // Optional backup model, used when the main one hasn't started answering within FALLBACK_AFTER seconds
 const FALLBACK_MODEL = process.env.FALLBACK_MODEL || '';
+// Model used by the search agent; it must support tool calling
+const AGENT_MODEL = process.env.AGENT_MODEL || process.env.FALLBACK_MODEL || process.env.MODEL || 'deepseek-chat';
 const FALLBACK_AFTER_MS = (Number(process.env.FALLBACK_AFTER) || 8) * 1000;
 // After the main model misses its deadline, skip it for a while so every message isn't delayed
 const PRIMARY_COOLDOWN_MS = 5 * 60 * 1000;
@@ -96,6 +99,28 @@ async function handleChat(req, res) {
   res.write(': connected\n\n');
   const ping = setInterval(() => res.write(': ping\n\n'), 15000);
   const fail = (message) => res.write(`data: ${JSON.stringify({ error: { message } })}\n\n`);
+
+  if (body.agent === 'search') {
+    const send = (obj) => res.write(`data: ${JSON.stringify(obj)}\n\n`);
+    try {
+      await runSearchAgent({
+        messages,
+        config: { baseUrl: BASE_URL, apiKey: API_KEY, model: AGENT_MODEL, maxTokens: MAX_TOKENS },
+        send,
+        signal: controller.signal,
+      });
+      if (!controller.signal.aborted) res.write('data: [DONE]\n\n');
+    } catch (e) {
+      if (!controller.signal.aborted) {
+        const timedOut = e.name === 'TimeoutError' || /timeout|fetch failed/i.test(e.message);
+        fail(timedOut ? 'The model is busy and did not respond in time. Please try again in a minute.' : e.message);
+      }
+    } finally {
+      clearInterval(ping);
+      res.end();
+    }
+    return;
+  }
 
   const thinking = model === 'deepseek-reasoner';
   const attempts = CUSTOM_MODEL
