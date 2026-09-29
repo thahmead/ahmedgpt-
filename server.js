@@ -21,6 +21,9 @@ const APP_NAME = process.env.APP_NAME || 'Chat';
 // the Think button then toggles its thinking on and off.
 const CUSTOM_MODEL = process.env.MODEL || '';
 const MAX_TOKENS = Number(process.env.MAX_TOKENS) || 8192;
+// Optional backup model, used when the main one hasn't started answering within FALLBACK_AFTER seconds
+const FALLBACK_MODEL = process.env.FALLBACK_MODEL || '';
+const FALLBACK_AFTER_MS = (Number(process.env.FALLBACK_AFTER) || 15) * 1000;
 const MAX_BODY = 25 * 1024 * 1024;
 const ALLOWED_MODELS = new Set(['deepseek-chat', 'deepseek-reasoner']);
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -92,27 +95,55 @@ async function handleChat(req, res) {
   const fail = (message) => res.write(`data: ${JSON.stringify({ error: { message } })}\n\n`);
 
   const thinking = model === 'deepseek-reasoner';
-  const payload = CUSTOM_MODEL
-    ? { model: CUSTOM_MODEL, messages, stream: true, max_tokens: MAX_TOKENS, chat_template_kwargs: { thinking } }
-    : { model, messages, stream: true };
+  const attempts = CUSTOM_MODEL
+    ? [{ model: CUSTOM_MODEL, messages, stream: true, max_tokens: MAX_TOKENS, chat_template_kwargs: { thinking } }]
+    : [{ model, messages, stream: true }];
+  if (FALLBACK_MODEL) {
+    attempts.push({ model: FALLBACK_MODEL, messages, stream: true, max_tokens: MAX_TOKENS, reasoning_effort: thinking ? 'medium' : 'low' });
+  }
 
   try {
-    const upstream = await fetch(`${BASE_URL}/chat/completions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${API_KEY}` },
-      body: JSON.stringify(payload),
-      signal: controller.signal,
-    });
-    if (!upstream.ok) {
-      let msg = `The AI provider returned an error (${upstream.status})`;
+    for (let i = 0; i < attempts.length; i++) {
+      const isLast = i === attempts.length - 1;
+      // Give the primary model a deadline to start answering; if it misses it, move to the fallback
+      const attempt = new AbortController();
+      const onClose = () => attempt.abort();
+      controller.signal.addEventListener('abort', onClose);
+      const deadline = isLast ? null : setTimeout(() => attempt.abort(), FALLBACK_AFTER_MS);
+      let upstream;
       try {
-        const j = await upstream.json();
-        const detail = j?.error?.message || j?.detail;
-        if (detail) msg += `: ${detail}`;
-      } catch {}
-      fail(msg);
-    } else {
+        upstream = await fetch(`${BASE_URL}/chat/completions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${API_KEY}` },
+          body: JSON.stringify(attempts[i]),
+          signal: attempt.signal,
+        });
+      } catch (e) {
+        if (controller.signal.aborted) return;
+        if (!isLast) {
+          console.log(`${attempts[i].model} did not respond in time, falling back to ${attempts[i + 1].model}`);
+          continue;
+        }
+        throw e;
+      } finally {
+        clearTimeout(deadline);
+      }
+      if (!upstream.ok) {
+        let msg = `The AI provider returned an error (${upstream.status})`;
+        try {
+          const j = await upstream.json();
+          const detail = j?.error?.message || j?.detail;
+          if (detail) msg += `: ${detail}`;
+        } catch {}
+        if (!isLast) {
+          console.log(`${attempts[i].model} failed (${msg}), falling back to ${attempts[i + 1].model}`);
+          continue;
+        }
+        fail(msg);
+        return;
+      }
       for await (const chunk of upstream.body) res.write(chunk);
+      return;
     }
   } catch (e) {
     if (!controller.signal.aborted) {

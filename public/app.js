@@ -515,7 +515,7 @@
     if (m.streaming && m.slow && !m.content && !m.reasoning) {
       const note = document.createElement('p');
       note.className = 'shimmer';
-      note.textContent = 'Waiting for the model to respond. This can take a minute when it is busy.';
+      note.textContent = 'Thinking…';
       content.appendChild(note);
     } else if (m.streaming && !m.reasoning) {
       const dot = document.createElement('span');
@@ -683,6 +683,7 @@
     scrollToBottom(true);
 
     const started = Date.now();
+    let reasoningStart = 0;
     const slowTimer = setTimeout(() => {
       m.slow = true;
       if (m.streaming && !m.content && !m.reasoning) updateStreamingMessage(chat, m);
@@ -733,9 +734,12 @@
           }
           if (json.error) throw new Error(json.error.message || 'Stream error');
           const delta = json.choices?.[0]?.delta || {};
-          if (delta.reasoning_content) m.reasoning += delta.reasoning_content;
+          if (delta.reasoning_content) {
+            if (!reasoningStart) reasoningStart = Date.now();
+            m.reasoning += delta.reasoning_content;
+          }
           if (delta.content) {
-            if (!m.content && m.reasoning) m.thinkingMs = Date.now() - started;
+            if (!m.content && m.reasoning) m.thinkingMs = Date.now() - (reasoningStart || started);
             m.content += delta.content;
           }
           schedule();
@@ -748,7 +752,7 @@
       clearTimeout(slowTimer);
       delete m.slow;
       if (frame) cancelAnimationFrame(frame);
-      if (m.reasoning && !m.thinkingMs) m.thinkingMs = Date.now() - started;
+      if (m.reasoning && !m.thinkingMs) m.thinkingMs = Date.now() - (reasoningStart || started);
       m.streaming = false;
       const idx = chat.messages.indexOf(m);
       if (idx !== -1 && !m.content && !m.reasoning && !m.error) {
