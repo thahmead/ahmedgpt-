@@ -3,7 +3,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const { runSearchAgent } = require('./agent');
+const { runAgent } = require('./agent');
 
 // Load .env (KEY=VALUE per line) without extra packages
 const envPath = path.join(__dirname, '.env');
@@ -100,10 +100,11 @@ async function handleChat(req, res) {
   const ping = setInterval(() => res.write(': ping\n\n'), 15000);
   const fail = (message) => res.write(`data: ${JSON.stringify({ error: { message } })}\n\n`);
 
-  if (body.agent === 'search') {
+  if (body.agent === 'search' || body.agent === 'research') {
     const send = (obj) => res.write(`data: ${JSON.stringify(obj)}\n\n`);
     try {
-      await runSearchAgent({
+      await runAgent({
+        mode: body.agent,
         messages,
         config: { baseUrl: BASE_URL, apiKey: API_KEY, model: AGENT_MODEL, maxTokens: MAX_TOKENS },
         send,

@@ -29,6 +29,7 @@
     appName: $('appName'),
     reasonToggle: $('reasonToggle'),
     searchToggle: $('searchToggle'),
+    researchToggle: $('researchToggle'),
     search: $('searchChats'),
     dropOverlay: $('dropOverlay'),
     toast: $('toast'),
@@ -57,6 +58,8 @@
     search: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
     page: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/></svg>',
     warn: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>',
+    download: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>',
+    flask: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6M10 3v6.5L4.6 18.2A2 2 0 0 0 6.3 21h11.4a2 2 0 0 0 1.7-2.8L14 9.5V3"/></svg>',
     chevron: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg>',
   };
 
@@ -337,19 +340,26 @@
   });
   els.reasonToggle.addEventListener('click', () => setModel(model === 'deepseek-reasoner' ? 'deepseek-chat' : 'deepseek-reasoner'));
 
-  // ---------- Search agent toggle ----------
-  let searchMode = false;
-  try { searchMode = localStorage.getItem('searchMode') === '1'; } catch {}
-  function setSearchMode(on) {
-    searchMode = on;
-    els.searchToggle.classList.toggle('active', on);
-    els.searchToggle.setAttribute('aria-pressed', on);
-    els.input.placeholder = on ? 'Search the web' : 'Ask anything';
-    try { localStorage.setItem('searchMode', on ? '1' : '0'); } catch {}
+  // ---------- Agent mode (Search / Research, one at a time) ----------
+  const AGENT_PLACEHOLDERS = { search: 'Search the web', research: 'What should I research? e.g. "best way to start a podcast"' };
+  let agentMode = null;
+  try { agentMode = ['search', 'research'].includes(localStorage.getItem('agentMode')) ? localStorage.getItem('agentMode') : null; } catch {}
+  function setAgentMode(mode) {
+    agentMode = mode;
+    for (const [m, btn] of [['search', els.searchToggle], ['research', els.researchToggle]]) {
+      btn.classList.toggle('active', mode === m);
+      btn.setAttribute('aria-pressed', mode === m);
+    }
+    els.input.placeholder = AGENT_PLACEHOLDERS[mode] || 'Ask anything';
+    try { localStorage.setItem('agentMode', mode || ''); } catch {}
   }
-  setSearchMode(searchMode);
+  setAgentMode(agentMode);
   els.searchToggle.addEventListener('click', () => {
-    setSearchMode(!searchMode);
+    setAgentMode(agentMode === 'search' ? null : 'search');
+    els.input.focus();
+  });
+  els.researchToggle.addEventListener('click', () => {
+    setAgentMode(agentMode === 'research' ? null : 'research');
     els.input.focus();
   });
 
@@ -655,11 +665,13 @@
         `<button class="icon-btn" data-act="copy" title="Copy">${ICONS.copy}</button>` +
         `<button class="icon-btn" data-act="up" title="Good response">${ICONS.up}</button>` +
         `<button class="icon-btn" data-act="down" title="Bad response">${ICONS.down}</button>` +
+        (m.agent === 'research' ? `<button class="icon-btn" data-act="download" title="Download report">${ICONS.download}</button>` : '') +
         (isLast ? `<button class="icon-btn" data-act="retry" title="Regenerate">${ICONS.retry}</button>` : '');
       actions.querySelector('[data-act=copy]').addEventListener('click', (e) => copyText(m.content, e.currentTarget));
       actions.querySelector('[data-act=up]').addEventListener('click', () => toast('Thanks for your feedback!'));
       actions.querySelector('[data-act=down]').addEventListener('click', () => toast('Thanks for your feedback!'));
       actions.querySelector('[data-act=retry]')?.addEventListener('click', () => regenerate(chat));
+      actions.querySelector('[data-act=download]')?.addEventListener('click', () => downloadReport(m, chat));
       el.appendChild(actions);
     }
     return el;
@@ -673,13 +685,14 @@
     const d = document.createElement('details');
     d.className = 'thinking agent-steps';
     const working = m.streaming && !m.content;
+    const research = m.agent === 'research';
     if (working) d.open = true;
     const reads = (m.steps || []).filter((s) => s.type === 'read' && s.done).length;
     const searches = (m.steps || []).filter((s) => s.type === 'search').length;
     const label = working
-      ? `<span class="shimmer">${escapeHtml(m.steps?.length ? stepLabel(m.steps[m.steps.length - 1]) : 'Searching the web')}</span>`
-      : reads ? `Read ${reads} source${reads === 1 ? '' : 's'}` : `Searched ${searches} time${searches === 1 ? '' : 's'}`;
-    d.innerHTML = `<summary>${ICONS.globe}${label}${ICONS.chevron}</summary><ol class="steps"></ol>`;
+      ? `<span class="shimmer">${escapeHtml(m.steps?.length ? stepLabel(m.steps[m.steps.length - 1]) : research ? 'Planning the research' : 'Searching the web')}</span>`
+      : reads ? `${research ? 'Researched' : 'Read'} ${reads} source${reads === 1 ? '' : 's'}` : `Searched ${searches} time${searches === 1 ? '' : 's'}`;
+    d.innerHTML = `<summary>${research ? ICONS.flask : ICONS.globe}${label}${ICONS.chevron}</summary><ol class="steps"></ol>`;
     const list = d.querySelector('.steps');
     for (const st of m.steps || []) {
       const li = document.createElement('li');
@@ -702,7 +715,7 @@
 
   function stepLabel(st) {
     if (st.type === 'search') return st.count == null ? `Searching “${st.query}”` : `Found ${st.count} results`;
-    return st.done || st.failed ? 'Thinking about what it found' : `Reading ${hostOf(st.url)}`;
+    return st.done || st.failed ? 'Weighing what it found' : `Reading ${hostOf(st.url)}`;
   }
 
   function buildSources(m) {
@@ -723,6 +736,18 @@
       wrap.appendChild(a);
     });
     return wrap;
+  }
+
+  function downloadReport(m, chat) {
+    const sources = (m.sources || []).map((src) => `- [${src.title}](${src.url})`).join('\n');
+    const md = `${m.content}\n\n---\n\n### Sources\n${sources || '- (none)'}\n\n_Researched by AhmedGPT on ${new Date().toLocaleDateString()}_\n`;
+    const topic = (m.content.match(/^##\s*Task Research:\s*(.+)$/m)?.[1] || chat.title).trim();
+    const slug = topic.toLowerCase().replace(/[^a-z0-9\u0600-\u06ff]+/g, '-').replace(/^-|-$/g, '').slice(0, 50) || 'research';
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([md], { type: 'text/markdown' }));
+    a.download = `${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${slug}-research.md`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
 
   function buildThinking(m) {
@@ -920,7 +945,7 @@
 
   async function runCompletion(chat) {
     const apiMessages = buildApiMessages(chat);
-    const m = { id: uid(), role: 'assistant', content: '', reasoning: '', streaming: true, model: chat.model, search: searchMode, steps: [] };
+    const m = { id: uid(), role: 'assistant', content: '', reasoning: '', streaming: true, model: chat.model, search: !!agentMode, agent: agentMode || undefined, steps: [] };
     chat.messages.push(m);
     const controller = new AbortController();
     streaming = { controller, chatId: chat.id };
@@ -947,7 +972,7 @@
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: chat.model, messages: apiMessages, agent: m.search ? 'search' : undefined }),
+        body: JSON.stringify({ model: chat.model, messages: apiMessages, agent: m.agent || (m.search ? 'search' : undefined) }),
         signal: controller.signal,
       });
       if (!res.ok) {
