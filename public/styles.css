@@ -432,13 +432,6 @@ input, textarea { font: inherit; color: inherit; }
 /* Brand */
 .brand { display: flex; align-items: center; gap: 10px; padding: 6px 10px 6px 6px; border-radius: 12px; }
 .brand:hover { background: var(--hover); }
-.brand-mark {
-  width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center;
-  background: #fff; flex-shrink: 0; overflow: hidden;
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 10%, transparent);
-}
-.brand-mark img { width: 100%; height: 100%; object-fit: cover; transform: scale(1.08); display: block; }
-.brand-mark.big { width: 56px; height: 56px; border-radius: 16px; margin-bottom: 8px; }
 .brand-name { font-weight: 600; font-size: 17px; letter-spacing: -.01em; }
 #appName { font-weight: 600; }
 
@@ -607,12 +600,6 @@ input, textarea { font: inherit; color: inherit; }
 /* ================= v1.2: sidebar highlights ================= */
 .sidebar { -webkit-tap-highlight-color: transparent; }
 .brand { padding: 4px; }
-.brand-mark { width: 38px; height: 38px; border-radius: 11px;
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 10%, transparent), 0 2px 6px rgba(0,0,0,.12), inset 0 1px 0 rgba(255,255,255,.6);
-  transition: transform .2s var(--spring), box-shadow .2s var(--ease);
-}
-.brand:hover .brand-mark { transform: scale(1.05) rotate(-3deg); box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 12%, transparent), 0 6px 14px rgba(0,0,0,.18); }
-.brand:active .brand-mark { transform: scale(.94); }
 .brand:hover { background: transparent; }
 
 /* Top section: hairline divider, shadow when the list scrolls beneath it */
@@ -637,3 +624,9 @@ input, textarea { font: inherit; color: inherit; }
 }
 .chat-item.active .chat-title { font-weight: 500; }
 .chat-item { margin-bottom: 1px; }
+
+/* ================= v1.3: chat-bubble brand icon ================= */
+.brand-icon { width: 36px; height: 36px; display: grid; place-items: center; color: var(--text); transition: transform .2s var(--spring); }
+.brand:hover .brand-icon { transform: scale(1.08) rotate(-4deg); }
+.brand:active .brand-icon { transform: scale(.92); }
+.brand-icon.big { width: 56px; height: 56px; margin-bottom: 8px; }
