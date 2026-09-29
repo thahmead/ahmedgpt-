@@ -1,0 +1,34 @@
+# Chat
+
+A ChatGPT-style chat website powered by the DeepSeek API.
+
+## Run it
+
+1. Install Node.js 18 or newer.
+2. Copy `.env.example` to `.env` and put your key in it.
+   - Key from platform.deepseek.com (`sk-...`): set only `DEEPSEEK_API_KEY`.
+   - NVIDIA key (`nvapi-...`): also set
+     `DEEPSEEK_BASE_URL=https://integrate.api.nvidia.com/v1` and
+     `MODEL=deepseek-ai/deepseek-v4.1-flash`.
+     You can swap `MODEL` for any other model on your NVIDIA account.
+3. Start the server: `npm start`
+4. Open http://localhost:3000
+
+No `npm install` is needed. The server has zero dependencies.
+
+## Features
+
+- Streaming replies with a stop button
+- Chat history in the sidebar (Today / Yesterday / ...), search, rename, delete
+- Edit a sent message, regenerate, copy
+- **Think** toggle turns on the model's thinking (`deepseek-reasoner`, or `thinking: true` when `MODEL` is set) and shows its reasoning ("Thought for N seconds")
+- Markdown, tables, code highlighting with copy buttons, LaTeX math
+- Attachments via the + button, drag and drop, or paste: text/code files, CSV, JSON, PDF, .docx and images
+- Light / dark / system theme; works on phones
+
+## Notes
+
+- The API key stays on the server; browsers never see it.
+- Chat history is saved in each visitor's browser (localStorage), so no database is needed.
+- DeepSeek's API is text-only: PDFs, Word files and text files are read and sent as text. Images show in the chat, but the model only sees their file names.
+- To put it online, deploy to any Node host (Render, Railway, Fly.io, a VPS) and set `DEEPSEEK_API_KEY` as an environment variable. Anyone with the link will be using your key, so consider adding a login or rate limiting before sharing it widely.
