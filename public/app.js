@@ -355,6 +355,10 @@
   $('scrim').addEventListener('click', closeSidebar);
   ['newChat', 'brandBtn', 'newChatBar'].forEach((id) => $(id).addEventListener('click', newChat));
   els.search.addEventListener('input', renderSidebar);
+  // Lift the top section with a soft shadow once the chat list scrolls under it
+  els.history.addEventListener('scroll', () => {
+    $('sidebar').classList.toggle('scrolled', els.history.scrollTop > 2);
+  }, { passive: true });
 
   function groupLabel(ts) {
     const d = new Date(ts);
@@ -1160,7 +1164,7 @@
     .then((r) => r.json())
     .then((cfg) => {
       els.appName.textContent = cfg.appName;
-      document.querySelector('.brand-name').textContent = cfg.appName;
+      $('brandBtn').setAttribute('aria-label', `${cfg.appName}, new chat`);
       document.title = cfg.appName;
       if (!cfg.hasKey) toast('Server has no API key yet. Add DEEPSEEK_API_KEY to .env');
     })

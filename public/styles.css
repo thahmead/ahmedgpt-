@@ -603,3 +603,37 @@ input, textarea { font: inherit; color: inherit; }
   *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0s !important; transition-duration: .01ms !important; }
   ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
 }
+
+/* ================= v1.2: sidebar highlights ================= */
+.sidebar { -webkit-tap-highlight-color: transparent; }
+.brand { padding: 4px; }
+.brand-mark { width: 38px; height: 38px; border-radius: 11px;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 10%, transparent), 0 2px 6px rgba(0,0,0,.12), inset 0 1px 0 rgba(255,255,255,.6);
+  transition: transform .2s var(--spring), box-shadow .2s var(--ease);
+}
+.brand:hover .brand-mark { transform: scale(1.05) rotate(-3deg); box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 12%, transparent), 0 6px 14px rgba(0,0,0,.18); }
+.brand:active .brand-mark { transform: scale(.94); }
+.brand:hover { background: transparent; }
+
+/* Top section: hairline divider, shadow when the list scrolls beneath it */
+.sidebar-nav {
+  position: relative; z-index: 2; background: var(--sidebar);
+  border-bottom: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
+  padding-bottom: 10px; margin-bottom: 2px;
+  transition: box-shadow .2s var(--ease);
+}
+.sidebar.scrolled .sidebar-nav { box-shadow: 0 8px 16px -10px rgba(0,0,0,.35); }
+.sidebar-bottom { border-top-color: color-mix(in srgb, var(--text) 8%, transparent); }
+.history-group:first-child { margin-top: 12px; }
+
+/* Rows: visible hover, pressed and selected states (pressed works on touch too) */
+.nav-item, .search-wrap, .chat-item { border-radius: 12px; }
+.nav-item:hover, .search-wrap:hover, .chat-item:hover { background: var(--hover); }
+.nav-item:active, .chat-item:active { background: var(--active); transform: scale(.98); }
+.search-wrap:focus-within { background: var(--hover); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 12%, transparent); }
+.chat-item.active {
+  background: var(--active);
+  box-shadow: 0 1px 2px rgba(0,0,0,.08), inset 0 1px 0 color-mix(in srgb, #fff 6%, transparent);
+}
+.chat-item.active .chat-title { font-weight: 500; }
+.chat-item { margin-bottom: 1px; }
