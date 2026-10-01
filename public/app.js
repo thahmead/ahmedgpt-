@@ -687,7 +687,8 @@
     const working = m.streaming && !m.content;
     const research = m.agent === 'research';
     if (working) d.open = true;
-    const reads = (m.steps || []).filter((s) => s.type === 'read' && s.done).length;
+    // Extra pages are opened in case some fail; count only the ones the answer used
+    const reads = m.sources?.length || (m.steps || []).filter((s) => s.type === 'read' && s.done).length;
     const searches = (m.steps || []).filter((s) => s.type === 'search').length;
     const label = working
       ? `<span class="shimmer">${escapeHtml(m.steps?.length ? stepLabel(m.steps[m.steps.length - 1]) : research ? 'Planning the research' : 'Searching the web')}</span>`
@@ -1046,13 +1047,19 @@
 
   function applyAgentEvent(m, ev) {
     const steps = m.steps;
-    if (ev.type === 'search') steps.push({ type: 'search', query: ev.query });
+    // Steps can run in parallel, so events carry the tool call id they belong to
+    const byId = (pred) => (ev.id ? steps.find((s) => s.id === ev.id) : [...steps].reverse().find(pred));
+    if (ev.type === 'search') steps.push({ type: 'search', id: ev.id, query: ev.query });
     else if (ev.type === 'results') {
-      const st = [...steps].reverse().find((s) => s.type === 'search' && s.count == null);
+      const st = byId((s) => s.type === 'search' && s.count == null);
       if (st) st.count = ev.count;
-    } else if (ev.type === 'read') steps.push({ type: 'read', url: ev.url });
+    } else if (ev.type === 'read') steps.push({ type: 'read', id: ev.id, url: ev.url });
     else if (ev.type === 'read_done' || ev.type === 'error') {
-      const st = [...steps].reverse().find((s) => s.type === 'read' && !s.done && !s.failed);
+      const st = byId((s) => s.type === 'read' && !s.done && !s.failed);
+      if (st?.type === 'search') {
+        st.count = 0; // a search that failed
+        return;
+      }
       if (!st) return;
       if (ev.type === 'read_done') Object.assign(st, { done: true, url: ev.url, title: ev.title });
       else st.failed = true;

@@ -26,7 +26,14 @@ const MAX_TOKENS = Number(process.env.MAX_TOKENS) || 8192;
 const FALLBACK_MODEL = process.env.FALLBACK_MODEL || '';
 // Model used by the search agent; it must support tool calling
 const AGENT_MODEL = process.env.AGENT_MODEL || process.env.FALLBACK_MODEL || process.env.MODEL || 'deepseek-chat';
-const FALLBACK_AFTER_MS = (Number(process.env.FALLBACK_AFTER) || 8) * 1000;
+const FALLBACK_AFTER_MS = (Number(process.env.FALLBACK_AFTER) || 5) * 1000;
+
+// Each model family switches its thinking on/off differently
+function modelOptions(name, thinking) {
+  if (/gpt-oss/.test(name)) return { reasoning_effort: thinking ? 'medium' : 'low' };
+  if (/\//.test(name)) return { chat_template_kwargs: { thinking, enable_thinking: thinking } }; // NVIDIA-hosted models
+  return {}; // DeepSeek's own API picks thinking by model name
+}
 // After the main model misses its deadline, skip it for a while so every message isn't delayed
 const PRIMARY_COOLDOWN_MS = 5 * 60 * 1000;
 let primaryDownUntil = 0;
@@ -106,7 +113,16 @@ async function handleChat(req, res) {
       await runAgent({
         mode: body.agent,
         messages,
-        config: { baseUrl: BASE_URL, apiKey: API_KEY, model: AGENT_MODEL, maxTokens: MAX_TOKENS },
+        config: {
+          baseUrl: BASE_URL,
+          apiKey: API_KEY,
+          model: AGENT_MODEL,
+          maxTokens: MAX_TOKENS,
+          extra: modelOptions(AGENT_MODEL, false),
+          fallback: FALLBACK_MODEL && FALLBACK_MODEL !== AGENT_MODEL
+            ? { model: FALLBACK_MODEL, extra: modelOptions(FALLBACK_MODEL, false) }
+            : null,
+        },
         send,
         signal: controller.signal,
       });
@@ -125,10 +141,10 @@ async function handleChat(req, res) {
 
   const thinking = model === 'deepseek-reasoner';
   const attempts = CUSTOM_MODEL
-    ? [{ model: CUSTOM_MODEL, messages, stream: true, max_tokens: MAX_TOKENS, chat_template_kwargs: { thinking } }]
+    ? [{ model: CUSTOM_MODEL, messages, stream: true, max_tokens: MAX_TOKENS, ...modelOptions(CUSTOM_MODEL, thinking) }]
     : [{ model, messages, stream: true }];
   if (FALLBACK_MODEL) {
-    attempts.push({ model: FALLBACK_MODEL, messages, stream: true, max_tokens: MAX_TOKENS, reasoning_effort: thinking ? 'medium' : 'low' });
+    attempts.push({ model: FALLBACK_MODEL, messages, stream: true, max_tokens: MAX_TOKENS, ...modelOptions(FALLBACK_MODEL, thinking) });
   }
 
   if (attempts.length > 1 && Date.now() < primaryDownUntil) attempts.shift();

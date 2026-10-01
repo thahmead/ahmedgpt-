@@ -22,8 +22,8 @@ No `npm install` is needed. The server has zero dependencies.
 - Chat history in the sidebar (Pinned / Today / Yesterday / ...), search, pin, rename, delete
 - Edit a sent message, regenerate, copy
 - **Think** toggle turns on the model's thinking (`deepseek-reasoner`, or `thinking: true` when `MODEL` is set) and shows its reasoning ("Thought for N seconds")
-- **Search** button: a web-search agent that searches, reads the most relevant pages, shows each step live, and answers with source links. Set `TAVILY_API_KEY` for reliable search; without it the agent uses Brave, then DuckDuckGo (via `curl`), then Wikipedia. It can't open private or local addresses.
-- **Research** button: a task-research agent (adapted from the Task Researcher method). It researches more deeply (up to 14 model calls), compares the options in a table, recommends one approach, and gives an implementation plan (objectives, key tasks, dependencies, success criteria). Reports can be downloaded as Markdown. Only one of Search or Research is on at a time.
+- **Search** button: a web-search agent: one model call plans the queries, all searches and page reads run in parallel, then the answer streams in with source links (usually under 10 seconds). Set `TAVILY_API_KEY` for reliable search; without it the agent uses Brave, then DuckDuckGo (via `curl`), then Wikipedia. It can't open private or local addresses.
+- **Research** button: a task-research agent (adapted from the Task Researcher method). It researches more deeply (3-5 searches and about 6 pages, read in parallel), compares the options in a table, recommends one approach, and gives an implementation plan (objectives, key tasks, dependencies, success criteria). Reports can be downloaded as Markdown. Only one of Search or Research is on at a time.
 - Markdown, tables, code highlighting with copy buttons, LaTeX math
 - Attachments via the + button, drag and drop, or paste: text/code files, CSV, JSON, PDF, .docx and images
 - Settings: theme, accent color, text size, default model, Enter to send, show thinking, custom instructions (nickname, about you, response style), export or delete all chats
